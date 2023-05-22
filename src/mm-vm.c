@@ -1,4 +1,4 @@
-//#ifdef MM_PAGING
+// #ifdef MM_PAGING
 /*
  * PAGING based Memory Management
  * Virtual memory module mm/mm-vm.c
@@ -130,9 +130,65 @@ int __free(struct pcb_t *caller, int vmaid, int rgid)
     return -1;
 
   /* TODO: Manage the collect freed region to freerg_list */
+	// Get start and end
+	rgnode.rg_start = caller->mm->symrgtbl[rgid].rg_start;
+	rgnode.rg_end = caller->mm->symrgtbl[rgid].rg_end;
 
-  /*enlist the obsoleted memory region */
-  enlist_vm_freerg_list(caller->mm, rgnode);
+	// Find rgnode in freerg_list
+	struct vm_area_struct *cur_vma = get_vma_by_num(caller->mm, vmaid);
+	struct vm_rg_struct *rgit = cur_vma->vm_freerg_list;
+
+	while (rgit != NULL)
+	{
+		struct vm_rg_struct *nextrg = rgit->rg_next;
+		if (nextrg == NULL)
+		{
+			if (rgit->rg_end == rgnode.rg_start)
+			{
+				//free(rgit)->node->NULL
+				rgit->rg_end = rgnode.rg_end;
+			}
+			else
+			{
+				//free(rgit)->used->node->NULL
+				nextrg = &rgnode;
+			}
+			break;
+		}
+		else
+		{
+			if (rgit->rg_end == rgnode.rg_start)
+			{
+				//free(rgit)->node->...
+				rgit->rg_end = rgnode.rg_end;
+				if (nextrg->rg_start == rgit->rg_end)
+				{
+					//free(rgit)->node->free(nextrg)->used->...->free
+					rgit->rg_end = nextrg->rg_end;
+					rgit->rg_next = nextrg->rg_next;
+					free(nextrg);
+				}
+				break;
+			}
+			else if (nextrg->rg_start == rgnode.rg_end)
+			{
+				//used->node->free(nextrg)
+				nextrg->rg_start = rgnode.rg_start;
+				break;
+			}
+			else if (rgit->rg_end < rgnode.rg_start && nextrg->rg_start > rgnode.rg_end)
+			{
+				//free(rgit)->used->node->used->free(nextrg)
+				rgit->rg_next = &rgnode;
+				rgnode.rg_next = nextrg;
+				break;
+			}
+			else rgit = nextrg;
+		}
+	}
+
+	/*enlist the obsoleted memory region */
+	enlist_vm_freerg_list(caller->mm, rgnode);
 
   return 0;
 }
@@ -193,12 +249,12 @@ int pg_getpage(struct mm_struct *mm, int pgn, int *fpn, struct pcb_t *caller)
 
     /* Do swap frame from MEMRAM to MEMSWP and vice versa*/
     /* Copy victim frame to swap */
-    __swap_cp_page(caller->mram, vicfpn,caller->mswp, swpfpn);
+    __swap_cp_page(caller->mram, vicfpn, caller->active_mswp, swpfpn);
     /* Copy target frame from swap to mem */
-    __swap_cp_page(caller->mswp, tgtfpn, caller->mram, vicfpn);
+    __swap_cp_page(caller->active_mswp, tgtfpn, caller->mram, vicfpn);
 
     /* Update page table */
-    pte_set_swap(&pte, 1, 0);
+    pte_set_swap(&pte, 0, 0);
 
     /* Update its online status of the target page */
     //pte_set_fpn() & mm->pgd[pgn];
@@ -405,7 +461,14 @@ int validate_overlap_vm_area(struct pcb_t *caller, int vmaid, int vmastart, int 
   //struct vm_area_struct *vma = caller->mm->mmap;
 
   /* TODO validate the planned memory area is not overlapped */
-
+  struct vm_area_struct *vma = caller->mm->mmap;
+  if (vmastart <= vma->vm_start){
+    if (vmaend >= vma->vm_start) return -1;
+  } 
+  
+  if (vma->vm_start <= vmastart){
+    if (vma->vm_end >= vmastart) return -1;
+  }
   return 0;
 }
 
@@ -454,7 +517,7 @@ int find_victim_page(struct mm_struct *mm, int *retpgn)
   if(pg == NULL) return -1;
   if(pg->pg_next == NULL) *retpgn = pg->pgn;
   else{
-    while(pg->next != NULL) pg = pg->next;
+    while(pg->pg_next != NULL) pg = pg->pg_next;
     *retpgn = pg->pgn;
   }
   //end - modify - toanNguyen
@@ -528,4 +591,4 @@ int get_free_vmrg_area(struct pcb_t *caller, int vmaid, int size, struct vm_rg_s
  return 0;
 }
 
-//#endif
+// #endif

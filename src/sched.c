@@ -5,6 +5,12 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+
+#ifndef MLQ_SCHED
+#define MLQ_SCHED
+#define MAX_PRIO 140
+#endif
+
 static struct queue_t ready_queue;
 static struct queue_t run_queue;
 static pthread_mutex_t queue_lock;
@@ -26,7 +32,6 @@ int queue_empty(void) {
 void init_scheduler(void) {
 #ifdef MLQ_SCHED
     int i ;
-
 	for (i = 0; i < MAX_PRIO; i ++)
 		mlq_ready_queue[i].size = 0;
 #endif
@@ -47,6 +52,46 @@ struct pcb_t * get_mlq_proc(void) {
 	/*TODO: get a process from PRIORITY [ready_queue].
 	 * Remember to use lock to protect the queue.
 	 * */
+	static unsigned long curr_prio = 0; //prio cua queue hien tai
+	static unsigned long curr_slot = 140; 
+
+	while(curr_prio < MAX_PRIO)
+	{
+	    while (curr_slot > 0 && !empty(&mlq_ready_queue[curr_prio]))
+	    {
+		pthread_mutex_lock(&queue_lock);
+		proc = dequeue(&mlq_ready_queue[curr_prio]);
+		pthread_mutex_unlock(&queue_lock);
+		if(proc != NULL)
+		{
+			curr_slot--;
+			return proc;
+		}		
+            }
+	    curr_prio++;
+	    curr_slot = MAX_PRIO - curr_prio;
+	}
+	curr_prio = 0;
+	curr_slot = 140;
+	
+	while(curr_prio < MAX_PRIO)
+	{
+	    while (curr_slot > 0 && !empty(&mlq_ready_queue[curr_prio]))
+	    {
+		pthread_mutex_lock(&queue_lock);
+		proc = dequeue(&mlq_ready_queue[curr_prio]);
+		pthread_mutex_unlock(&queue_lock);
+		if(proc != NULL)
+		{
+			curr_slot--;
+			return proc;
+		}		
+            }
+	    curr_prio++;
+	    curr_slot = MAX_PRIO - curr_prio;
+	}
+	curr_prio = 0;
+	curr_slot = 140;
 	return proc;	
 }
 
@@ -79,6 +124,27 @@ struct pcb_t * get_proc(void) {
 	/*TODO: get a process from [ready_queue].
 	 * Remember to use lock to protect the queue.
 	 * */
+	static unsigned long curr_prio = 0; //prio cua queue hien tai
+	static unsigned long curr_slot = 140; //non usefull
+	
+
+	while(curr_prio < MAX_PRIO)
+	{
+	    while (curr_slot > 0)
+	    {
+		pthread_mutex_lock(&queue_lock);
+		proc = dequeue(&mlq_ready_queue[curr_prio]);
+		pthread_mutex_unlock(&queue_lock);
+		if(proc != NULL) 
+		{
+			curr_slot--;
+			return proc;
+		}
+            }
+	    curr_prio++;
+	    curr_slot = MAX_PRIO - curr_prio;
+	}
+	curr_prio = 0;
 	return proc;
 }
 
